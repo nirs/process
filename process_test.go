@@ -165,7 +165,6 @@ func TestProcess(t *testing.T) {
 
 	t.Run("kill name mismatch", func(t *testing.T) {
 		cmd := startProcess(t, noterm)
-		defer cmd.Process.Kill()
 		err := process.Kill(cmd.Process.Pid, "no-such-process")
 		if err == nil {
 			t.Fatalf("Killed unrelated process")
