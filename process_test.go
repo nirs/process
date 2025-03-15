@@ -177,7 +177,7 @@ func TestProcess(t *testing.T) {
 
 func startProcess(t *testing.T, cmd string) *exec.Cmd {
 	name := filepath.Base(cmd)
-	c := exec.Command(cmd)
+	c := exec.Command(cmd, "arg1", "arg2")
 	stdout, err := c.StdoutPipe()
 	if err != nil {
 		t.Fatal(err)
