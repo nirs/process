@@ -72,8 +72,8 @@ func Exists(pid int, executable string) (bool, error) {
 	}
 
 	// Slow path if pid exist, depending on the platform:
-	// - On windows and darwin this fetch all processes from the krenel and
-	//   find a process with pid.
+	// - On windows and darwin this fetch all processes from the krenel and find
+	//   a process with pid.
 	//   - https://github.com/mitchellh/go-ps/blob/master/process_windows.go
 	//   - https://github.com/mitchellh/go-ps/blob/master/process_darwin.go
 	// - On linux this reads /proc/pid/stat
@@ -87,10 +87,15 @@ func Exists(pid int, executable string) (bool, error) {
 	return entry.Executable() == executable, nil
 }
 
-// Signal sends signal to the process with pid matching name. Returns
-// os.ErrProcessDone if the process does not exist, or nil if the signal was
-// sent.
-func Signal(pid int, executable string, sig syscall.Signal) error {
+// Terminate terminate a process with pid and matching name. Returns
+// os.ErrProcessDone if the process does not exist, or nil if termiation was
+// requested.
+//   - On unix this sends a SIGTERM signal to the process, which may ignore the
+//     signal or start graceful shutdown. The caller need to poll Exists() until the
+//     process terminates.
+//   - On windows there is no generic way to send termination signal, so this
+//     falls back to killing the process.
+func Terminate(pid int, executable string) error {
 	exists, err := Exists(pid, executable)
 	if err != nil {
 		return err
@@ -102,11 +107,18 @@ func Signal(pid int, executable string, sig syscall.Signal) error {
 	if err != nil {
 		return fmt.Errorf("failed to find pid %v: %s", pid, err)
 	}
-	// Returns os.ErrProcessDone if process does not exist (ESRCH).
-	if err := p.Signal(sig); err != nil {
-		return fmt.Errorf("failed to send signal %v: %s", sig, err)
+	if runtime.GOOS == "windows" {
+		if err := p.Kill(); err != nil {
+			return fmt.Errorf("failed to kill: %s", err)
+		}
+		return nil
+	} else {
+		if err := p.Signal(syscall.SIGTERM); err != nil {
+			return fmt.Errorf("failed to send signal %v: %s", syscall.SIGTERM, err)
+		}
+		return nil
+
 	}
-	return nil
 }
 
 // Terminate kills a process with pid matching executable name. Returns
@@ -124,7 +136,6 @@ func Kill(pid int, executable string) error {
 	if err != nil {
 		return fmt.Errorf("failed to find pid %v: %s", pid, err)
 	}
-	// Returns os.ErrProcessDone if process does not exist (ESRCH).
 	if err := p.Kill(); err != nil {
 		return fmt.Errorf("failed to kill: %s", err)
 	}

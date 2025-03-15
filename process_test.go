@@ -24,7 +24,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"syscall"
 	"testing"
 	"time"
 
@@ -104,7 +103,7 @@ func TestProcess(t *testing.T) {
 
 	t.Run("terminate", func(t *testing.T) {
 		cmd := startProcess(t, sleep)
-		err := process.Signal(cmd.Process.Pid, filepath.Base(sleep), syscall.SIGTERM)
+		err := process.Terminate(cmd.Process.Pid, filepath.Base(sleep))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -120,7 +119,7 @@ func TestProcess(t *testing.T) {
 
 	t.Run("terminate name mismatch", func(t *testing.T) {
 		cmd := startProcess(t, sleep)
-		err := process.Signal(cmd.Process.Pid, "no-such-process", syscall.SIGTERM)
+		err := process.Terminate(cmd.Process.Pid, "no-such-process")
 		if err == nil {
 			t.Fatalf("Signaled unrelated process")
 		}
@@ -130,8 +129,11 @@ func TestProcess(t *testing.T) {
 	})
 
 	t.Run("terminate ignored", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("no way to ignore termination on windows")
+		}
 		cmd := startProcess(t, noterm)
-		err := process.Signal(cmd.Process.Pid, filepath.Base(noterm), syscall.SIGTERM)
+		err := process.Terminate(cmd.Process.Pid, filepath.Base(noterm))
 		if err != nil {
 			t.Fatal(err)
 		}
