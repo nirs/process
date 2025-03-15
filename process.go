@@ -19,6 +19,7 @@ package process
 import (
 	"fmt"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -54,15 +55,28 @@ func ReadPidfile(path string) (int, error) {
 func Exists(pid int, executable string) (bool, error) {
 	// Fast path if pid does not exist.
 	process, err := os.FindProcess(pid)
-	if err != nil {
-		return true, fmt.Errorf("os.FindProcess(%v): %s", pid, err)
-	}
-	if err := process.Signal(syscall.Signal(0)); err != nil {
-		if err == os.ErrProcessDone {
+	if runtime.GOOS == "windows" {
+		// On windows this fails with "OpenProcess: The parameter is incorrect"
+		// if the process does not exist.
+		if err != nil {
 			return false, nil
 		}
+	} else {
+		// On unix this never fails and we get a process in "done" state that
+		// returns os.ErrProcessDone from Signal or Wait.
+		if err := process.Signal(syscall.Signal(0)); err != nil {
+			if err == os.ErrProcessDone {
+				return false, nil
+			}
+		}
 	}
-	// Slow path, if pid exist.
+
+	// Slow path if pid exist, depending on the platform:
+	// - On windows and darwin this fetch all processes from the krenel and
+	//   find a process with pid.
+	//   - https://github.com/mitchellh/go-ps/blob/master/process_windows.go
+	//   - https://github.com/mitchellh/go-ps/blob/master/process_darwin.go
+	// - On linux this reads /proc/pid/stat
 	entry, err := ps.FindProcess(pid)
 	if err != nil {
 		return true, fmt.Errorf("ps.FindProcess(%v): %s", pid, err)
