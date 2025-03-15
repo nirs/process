@@ -19,10 +19,8 @@ package process
 import (
 	"fmt"
 	"os"
-	"runtime"
 	"strconv"
 	"strings"
-	"syscall"
 
 	"github.com/mitchellh/go-ps"
 )
@@ -54,32 +52,20 @@ func ReadPidfile(path string) (int, error) {
 // not the path to the executable.
 func Exists(pid int, executable string) (bool, error) {
 	// Fast path if pid does not exist.
-	process, err := os.FindProcess(pid)
-	if runtime.GOOS == "windows" {
-		// On windows this fails with "OpenProcess: The parameter is incorrect"
-		// if the process does not exist.
-		if err != nil {
-			return false, nil
-		}
-	} else {
-		// On unix this never fails and we get a process in "done" state that
-		// returns os.ErrProcessDone from Signal or Wait.
-		if err := process.Signal(syscall.Signal(0)); err != nil {
-			if err == os.ErrProcessDone {
-				return false, nil
-			}
-		}
+	exists, err := pidExists(pid)
+	if err != nil {
+		return true, err
+	}
+	if !exists {
+		return false, nil
 	}
 
-	// Slow path if pid exist, depending on the platform:
-	// - On windows and darwin this fetch all processes from the krenel and find
-	//   a process with pid.
-	//   - https://github.com/mitchellh/go-ps/blob/master/process_windows.go
-	//   - https://github.com/mitchellh/go-ps/blob/master/process_darwin.go
-	// - On linux this reads /proc/pid/stat
+	// Slow path if pid exist, depending on the platform. On windows and darwin
+	// this fetch all processes from the krenel and find a process with pid. On
+	// linux this reads /proc/pid/stat
 	entry, err := ps.FindProcess(pid)
 	if err != nil {
-		return true, fmt.Errorf("ps.FindProcess(%v): %s", pid, err)
+		return true, err
 	}
 	if entry == nil {
 		return false, nil
@@ -87,14 +73,9 @@ func Exists(pid int, executable string) (bool, error) {
 	return entry.Executable() == executable, nil
 }
 
-// Terminate terminate a process with pid and matching name. Returns
-// os.ErrProcessDone if the process does not exist, or nil if termiation was
-// requested.
-//   - On unix this sends a SIGTERM signal to the process, which may ignore the
-//     signal or start graceful shutdown. The caller need to poll Exists() until the
-//     process terminates.
-//   - On windows there is no generic way to send termination signal, so this
-//     falls back to killing the process.
+// Terminate a process with pid and matching name. Returns os.ErrProcessDone if
+// the process does not exist, or nil if termiation was requested. Caller need
+// to wait until the process disappears.
 func Terminate(pid int, executable string) error {
 	exists, err := Exists(pid, executable)
 	if err != nil {
@@ -103,27 +84,12 @@ func Terminate(pid int, executable string) error {
 	if !exists {
 		return os.ErrProcessDone
 	}
-	p, err := os.FindProcess(pid)
-	if err != nil {
-		return fmt.Errorf("failed to find pid %v: %s", pid, err)
-	}
-	if runtime.GOOS == "windows" {
-		if err := p.Kill(); err != nil {
-			return fmt.Errorf("failed to kill: %s", err)
-		}
-		return nil
-	} else {
-		if err := p.Signal(syscall.SIGTERM); err != nil {
-			return fmt.Errorf("failed to send signal %v: %s", syscall.SIGTERM, err)
-		}
-		return nil
-
-	}
+	return terminatePid(pid)
 }
 
-// Terminate kills a process with pid matching executable name. Returns
-// os.ErrProcessDone if the process does not exist or nil the kill was
-// requested.
+// Kill a process with pid matching executable name. Returns os.ErrProcessDone
+// if the process does not exist or nil the kill was requested. Caller need to
+// wait until the process disappears.
 func Kill(pid int, executable string) error {
 	exists, err := Exists(pid, executable)
 	if err != nil {
@@ -132,12 +98,5 @@ func Kill(pid int, executable string) error {
 	if !exists {
 		return os.ErrProcessDone
 	}
-	p, err := os.FindProcess(pid)
-	if err != nil {
-		return fmt.Errorf("failed to find pid %v: %s", pid, err)
-	}
-	if err := p.Kill(); err != nil {
-		return fmt.Errorf("failed to kill: %s", err)
-	}
-	return nil
+	return killPid(pid)
 }
