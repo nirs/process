@@ -38,12 +38,13 @@ func WritePidfile(path string, pid int) error {
 func ReadPidfile(path string) (int, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return -1, fmt.Errorf("failed to read %q: %s", path, err)
+		// Pass os.ErrNotExist
+		return -1, err
 	}
 	s := strings.TrimSpace(string(data))
 	pid, err := strconv.Atoi(s)
 	if err != nil {
-		return -1, fmt.Errorf("invalid pid %q: %s", data, err)
+		return -1, fmt.Errorf("invalid pid %q: %s", s, err)
 	}
 	return pid, nil
 }
