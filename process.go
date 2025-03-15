@@ -38,12 +38,12 @@ func WritePidfile(path string, pid int) error {
 func ReadPidfile(path string) (int, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return -1, err
+		return -1, fmt.Errorf("failed to read %q: %s", path, err)
 	}
 	s := strings.TrimSpace(string(data))
 	pid, err := strconv.Atoi(s)
 	if err != nil {
-		return -1, err
+		return -1, fmt.Errorf("invalid pid %q: %s", data, err)
 	}
 	return pid, nil
 }
@@ -54,7 +54,7 @@ func Exists(pid int, executable string) (bool, error) {
 	// Fast path if pid does not exist.
 	process, err := os.FindProcess(pid)
 	if err != nil {
-		return true, err
+		return true, fmt.Errorf("failed to find pid %v: %s", pid, err)
 	}
 	if err := process.Signal(syscall.Signal(0)); err != nil {
 		if err == os.ErrProcessDone {
@@ -64,7 +64,7 @@ func Exists(pid int, executable string) (bool, error) {
 	// Slow path, if pid exist.
 	entry, err := ps.FindProcess(pid)
 	if err != nil {
-		return true, err
+		return true, fmt.Errorf("failed to find pid %v: %s", pid, err)
 	}
 	if entry == nil {
 		return false, nil
@@ -85,10 +85,13 @@ func Signal(pid int, executable string, sig syscall.Signal) error {
 	}
 	p, err := os.FindProcess(pid)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to find pid %v: %s", pid, err)
 	}
 	// Returns os.ErrProcessDone if process does not exist (ESRCH).
-	return p.Signal(sig)
+	if err := p.Signal(sig); err != nil {
+		return fmt.Errorf("failed to send signal %v: %s", sig, err)
+	}
+	return nil
 }
 
 // Terminate kills a process with pid matching executable name. Returns
@@ -104,8 +107,11 @@ func Kill(pid int, executable string) error {
 	}
 	p, err := os.FindProcess(pid)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to find pid %v: %s", pid, err)
 	}
 	// Returns os.ErrProcessDone if process does not exist (ESRCH).
-	return p.Kill()
+	if err := p.Kill(); err != nil {
+		return fmt.Errorf("failed to kill: %s", err)
+	}
+	return nil
 }
