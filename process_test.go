@@ -86,7 +86,7 @@ func TestProcess(t *testing.T) {
 		if !exists {
 			t.Fatal("existing process not found")
 		}
-		exists, err = process.Exists(-1, filepath.Base(sleep))
+		exists, err = process.Exists(0xfffffffc, filepath.Base(sleep))
 		if err != nil {
 			t.Fatal(err)
 		}
