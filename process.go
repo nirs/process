@@ -55,7 +55,7 @@ func Exists(pid int, executable string) (bool, error) {
 	// Fast path if pid does not exist.
 	process, err := os.FindProcess(pid)
 	if err != nil {
-		return true, fmt.Errorf("failed to find pid %v: %s", pid, err)
+		return true, fmt.Errorf("os.FindProcess(%v): %s", pid, err)
 	}
 	if err := process.Signal(syscall.Signal(0)); err != nil {
 		if err == os.ErrProcessDone {
@@ -65,7 +65,7 @@ func Exists(pid int, executable string) (bool, error) {
 	// Slow path, if pid exist.
 	entry, err := ps.FindProcess(pid)
 	if err != nil {
-		return true, fmt.Errorf("failed to find pid %v: %s", pid, err)
+		return true, fmt.Errorf("ps.FindProcess(%v): %s", pid, err)
 	}
 	if entry == nil {
 		return false, nil
